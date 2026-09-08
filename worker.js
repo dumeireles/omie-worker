@@ -2,21 +2,16 @@ const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const axios = require('axios');
 
-// Servidor mínimo para satisfazer o Web Service do Render
 const app = express();
 const PORT = process.env.PORT || 3000;
-app.get('/', (req, res) => res.send('Worker Omie está ativo!'));
+app.get('/', (req, res) => res.send('Worker Omie Ativo!'));
 app.listen(PORT, () => console.log(`HTTP server rodando na porta ${PORT}`));
 
-// --- RESTO DO CÓDIGO DA FILA CONTINUA IGUAL ---
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const OMIE_APP_KEY = process.env.OMIE_APP_KEY;
-const OMIE_APP_SECRET = process.env.OMIE_APP_SECRET;
-
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-const DELAY_MS = 3500;
 
+const DELAY_MS = 3500;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function processQueue() {
@@ -32,13 +27,7 @@ async function processQueue() {
         .limit(1)
         .maybeSingle();
 
-      if (error) {
-        console.error('Erro ao buscar Supabase:', error.message);
-        await sleep(5000);
-        continue;
-      }
-
-      if (!item) {
+      if (error || !item) {
         await sleep(4000);
         continue;
       }
@@ -50,10 +39,11 @@ async function processQueue() {
         .update({ status: 'processing', updated_at: new Date() })
         .eq('id', item.id);
 
+      // Pega app_key e app_secret enviados diretamente pelo Zapier
       const omiePayload = {
         call: item.payload.omie_call,
-        app_key: OMIE_APP_KEY,
-        app_secret: OMIE_APP_SECRET,
+        app_key: item.payload.app_key,
+        app_secret: item.payload.app_secret,
         param: item.payload.param
       };
 
