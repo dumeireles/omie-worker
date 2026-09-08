@@ -1,13 +1,21 @@
+const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const axios = require('axios');
 
+// Servidor mínimo para satisfazer o Web Service do Render
+const app = express();
+const PORT = process.env.PORT || 3000;
+app.get('/', (req, res) => res.send('Worker Omie está ativo!'));
+app.listen(PORT, () => console.log(`HTTP server rodando na porta ${PORT}`));
+
+// --- RESTO DO CÓDIGO DA FILA CONTINUA IGUAL ---
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const OMIE_APP_KEY = process.env.OMIE_APP_KEY;
 const OMIE_APP_SECRET = process.env.OMIE_APP_SECRET;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-const DELAY_MS = 3500; // Tempo de espera de 3.5 segundos entre requests
+const DELAY_MS = 3500;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -62,7 +70,6 @@ async function processQueue() {
       const errorMsg = err.response?.data || err.message;
       console.error(`[Erro] Falha no ID:`, errorMsg);
       
-      // Em caso de falha, marca como failed para não travar a fila
       try {
         await supabase
           .from('integration_queue')
