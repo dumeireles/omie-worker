@@ -1,0 +1,9 @@
+{
+  "name": "omie-worker",
+  "version": "1.0.0",
+  "main": "worker.js",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "axios": "^1.6.0"
+  }
+}
