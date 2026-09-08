@@ -56,20 +56,27 @@ async function processQueue() {
 
       console.log(`[Omie] Sucesso no ID #${item.id}!`);
 
-    } catch (err) {
+} catch (err) {
       const errorMsg = err.response?.data || err.message;
-      console.error(`[Erro] Falha no ID:`, errorMsg);
+      const errorStr = JSON.stringify(errorMsg);
+      console.error(`[Erro] Falha no ID #${item.id}:`, errorMsg);
       
-      try {
+      // Se for erro de consumo redundante, devolve para 'pending' para tentar depois
+      if (errorStr.includes("REDUNDANT") || errorStr.includes("Consumo redundante")) {
+        console.log(`[Omie] Redundância detectada. Reagendando ID #${item.id}...`);
         await supabase
           .from('integration_queue')
-          .update({ status: 'failed', error_message: JSON.stringify(errorMsg) })
-          .eq('status', 'processing');
-      } catch (e) {}
+          .update({ status: 'pending', error_message: errorStr })
+          .eq('id', item.id);
+        
+        // Aguarda 60 segundos antes da próxima tentativa
+        await sleep(60000);
+      } else {
+        await supabase
+          .from('integration_queue')
+          .update({ status: 'failed', error_message: errorStr })
+          .eq('id', item.id);
+      }
     }
-
-    await sleep(DELAY_MS);
-  }
-}
 
 processQueue();
