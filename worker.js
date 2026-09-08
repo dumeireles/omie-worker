@@ -18,6 +18,8 @@ async function processQueue() {
   console.log("Worker iniciado e escutando a fila...");
   
   while (true) {
+    let currentItem = null;
+
     try {
       const { data: item, error } = await supabase
         .from('integration_queue')
@@ -32,51 +34,60 @@ async function processQueue() {
         continue;
       }
 
-      console.log(`[Fila] Processando ID #${item.id}...`);
+      currentItem = item;
+      console.log(`[Fila] Processando ID #${currentItem.id}...`);
 
       await supabase
         .from('integration_queue')
         .update({ status: 'processing', updated_at: new Date() })
-        .eq('id', item.id);
+        .eq('id', currentItem.id);
 
-      // Pega app_key e app_secret enviados diretamente pelo Zapier
       const omiePayload = {
-        call: item.payload.omie_call,
-        app_key: item.payload.app_key,
-        app_secret: item.payload.app_secret,
-        param: item.payload.param
+        call: currentItem.payload.omie_call,
+        app_key: currentItem.payload.app_key,
+        app_secret: currentItem.payload.app_secret,
+        param: currentItem.payload.param
       };
 
-      await axios.post(item.payload.omie_endpoint, omiePayload);
+      await axios.post(currentItem.payload.omie_endpoint, omiePayload);
 
       await supabase
         .from('integration_queue')
         .update({ status: 'completed', updated_at: new Date() })
-        .eq('id', item.id);
+        .eq('id', currentItem.id);
 
-      console.log(`[Omie] Sucesso no ID #${item.id}!`);
+      console.log(`[Omie] Sucesso no ID #${currentItem.id}!`);
 
-} catch (err) {
-      const errorMsg = err.response?.data || err.message;
-      const errorStr = JSON.stringify(errorMsg);
-      console.error(`[Erro] Falha no ID #${item.id}:`, errorMsg);
-      
-      // Se for erro de consumo redundante, devolve para 'pending' para tentar depois
-      if (errorStr.includes("REDUNDANT") || errorStr.includes("Consumo redundante")) {
-        console.log(`[Omie] Redundância detectada. Reagendando ID #${item.id}...`);
-        await supabase
-          .from('integration_queue')
-          .update({ status: 'pending', error_message: errorStr })
-          .eq('id', item.id);
+    } catch (err) {
+      if (currentItem) {
+        const errorMsg = err.response?.data || err.message;
+        const errorStr = typeof errorMsg === 'object' ? JSON.stringify(errorMsg) : String(errorMsg);
         
-        // Aguarda 60 segundos antes da próxima tentativa
-        await sleep(60000);
-      } else {
-        await supabase
-          .from('integration_queue')
-          .update({ status: 'failed', error_message: errorStr })
-          .eq('id', item.id);
+        console.error(`[Erro] Falha no ID #${currentItem.id}:`, errorMsg);
+
+        // Se o Omie bloquear por consulta redundante em menos de 60s
+        if (errorStr.includes("REDUNDANT") || errorStr.includes("Consumo redundante")) {
+          console.log(`[Omie] Redundância detectada. Reagendando ID #${currentItem.id}...`);
+          
+          await supabase
+            .from('integration_queue')
+            .update({ status: 'pending', error_message: errorStr, updated_at: new Date() })
+            .eq('id', currentItem.id);
+
+          // Aguarda 60s exigidos pelo Omie antes da próxima iteração
+          await sleep(60000);
+        } else {
+          // Outros erros reais de validação ou payload incorreto
+          await supabase
+            .from('integration_queue')
+            .update({ status: 'failed', error_message: errorStr, updated_at: new Date() })
+            .eq('id', currentItem.id);
+        }
       }
     }
+
+    await sleep(DELAY_MS);
+  }
+}
 
 processQueue();
